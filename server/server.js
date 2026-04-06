@@ -1,8 +1,21 @@
+const dns = require('dns');
+
+// Set DNS servers to Google DNS to fix SRV lookup issues
+dns.setServers(['8.8.8.8', '8.8.4.4']);
+
+require('dotenv').config();
+
+const connectDB = require('./db');
+const Track = require('./models/Track');
+const User = require('./models/User');
+
+// Connect to MongoDB at startup
+connectDB();
+
 const express = require('express');
 const session = require('express-session');
 const cors = require('cors');
 const axios = require('axios');
-require('dotenv').config();
 
 const app = express();
 app.use(cors({ origin: 'http://localhost:3000', credentials: true }));
@@ -49,10 +62,51 @@ app.get('/callback', async (req, res) => {
       }
     });
 
-  req.session.accessToken = tokenRes.data.access_token;
-  req.session.refreshToken = tokenRes.data.refresh_token;
+  const accessToken = tokenRes.data.access_token;
+  req.session.accessToken = accessToken;
 
-  res.send('Auth successful! You are logged in.');
+  const headers = { Authorization: `Bearer ${accessToken}` };
+
+  // Fetch user profile
+  const { data: profile } = await axios.get('https://api.spotify.com/v1/me', { headers });
+
+  // Fetch top tracks
+  const { data: topData } = await axios.get('https://api.spotify.com/v1/me/top/tracks?limit=20', { headers });
+  const tracks = topData.items;
+
+  // Save tracks WITHOUT audio features for now
+  const trackIds = [];
+  for (let i = 0; i < tracks.length; i++) {
+    const t = tracks[i];
+
+    await Track.findOneAndUpdate(
+      { spotifyId: t.id },
+      {
+        spotifyId:  t.id,
+        name:       t.name,
+        artists:    t.artists.map(a => ({ name: a.name, id: a.id })),
+        album:      t.album.name,
+        previewUrl: t.preview_url,
+      },
+      { upsert: true, new: true }
+    );
+    trackIds.push(t.id);
+  }
+
+  // Save or update user
+  await User.findOneAndUpdate(
+    { spotifyId: profile.id },
+    {
+      spotifyId:   profile.id,
+      displayName: profile.display_name,
+      email:       profile.email,
+      topTracks:   trackIds,
+    },
+    { upsert: true, new: true }
+  );
+
+  req.session.userId = profile.id;
+  res.send('Auth successful! User and tracks saved to MongoDB.');
 });
 
 // Step 3: Test — fetch current user's top tracks
