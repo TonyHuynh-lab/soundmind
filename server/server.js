@@ -1,6 +1,6 @@
 const dns = require('dns');
 
-// Set DNS servers to Google DNS to fix SRV lookup issues
+// set DNS servers to Google DNS to fix SRV lookup issues
 dns.setServers(['8.8.8.8', '8.8.4.4']);
 
 require('dotenv').config();
@@ -9,7 +9,7 @@ const connectDB = require('./db');
 const Track = require('./models/Track');
 const User = require('./models/User');
 
-// Connect to MongoDB at startup
+// connect to MongoDB at startup
 connectDB();
 
 const express = require('express');
