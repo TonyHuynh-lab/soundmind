@@ -2,9 +2,13 @@ fastapi
 uvicorn
 pandas
 numpy
+scipy
 scikit-learn
 joblib
 pyarrow
 matplotlib
 seaborn
 kneed
+pymongo
+python-dotenv
+umap-learn

@@ -120,41 +120,90 @@ app.get('/api/top-tracks', async (req, res) => {
   res.json(data);
 });
 
-app.get('/api/recommend', async (req, res) => {
-  const { song, artist, n = 10, trackId, genre } = req.query;
-  if (!song || !artist) return res.status(400).json({ error: 'song and artist required' });
+app.post('/api/recommend', async (req, res) => {
+  const { seeds, n = 10 } = req.body;
+  if (!seeds?.length) return res.status(400).json({ error: 'seeds required' });
 
-  const body = { Song: song, Artists: artist, n: parseInt(n) };
-  if (genre) body.Genre = genre;
+  const top5 = seeds.slice(0, 5);
 
-  // Fetch Spotify audio features for Tier 2 fallback
-  if (trackId && req.session.accessToken) {
+  // Batch-fetch Spotify audio features for all seeds in one API call
+  let featuresMap = {};
+  if (req.session.accessToken) {
     try {
-      const { data: f } = await axios.get(
-        `https://api.spotify.com/v1/audio-features/${trackId}`,
+      const ids = top5.map(s => s.trackId).filter(Boolean).join(',');
+      const { data: af } = await axios.get(
+        `https://api.spotify.com/v1/audio-features?ids=${ids}`,
         { headers: { Authorization: `Bearer ${req.session.accessToken}` } }
       );
-      body.Danceability     = f.danceability;
-      body.Energy           = f.energy;
-      body.Loudness         = f.loudness;
-      body.Speechiness      = f.speechiness;
-      body.Acousticness     = f.acousticness;
-      body.Instrumentalness = f.instrumentalness;
-      body.Valence          = f.valence;
-      body.Tempo            = f.tempo;
-    } catch {
-      // feature fetch failed — FastAPI will use Tier 3 genre fallback
-    }
+      for (const f of af.audio_features || []) {
+        if (f) featuresMap[f.id] = f;
+      }
+    } catch { /* proceed without features */ }
   }
 
+  function withFeatures(body, trackId) {
+    const f = featuresMap[trackId];
+    if (!f) return body;
+    return {
+      ...body,
+      Danceability: f.danceability, Energy: f.energy,       Loudness: f.loudness,
+      Speechiness:  f.speechiness,  Acousticness: f.acousticness,
+      Instrumentalness: f.instrumentalness, Valence: f.valence, Tempo: f.tempo,
+    };
+  }
+
+  // Tier 1: KNN — try each of the top 5 seeds, return on first dataset hit
+  for (const seed of top5) {
+    try {
+      const body = withFeatures({ Song: seed.song, Artists: seed.artist, n }, seed.trackId);
+      const { data } = await axios.post('http://localhost:8000/recommend', body);
+      if (data.fallback === 'knn') return res.json(data);
+    } catch { /* try next seed */ }
+  }
+
+  // Tier 2 & 3: feature/genre fallback on seeds[0] — FastAPI handles internally
+  const seed0 = top5[0];
   try {
+    const body = withFeatures({ Song: seed0.song, Artists: seed0.artist, n }, seed0.trackId);
     const { data } = await axios.post('http://localhost:8000/recommend', body);
-    res.json(data);
+    return res.json(data);
   } catch (err) {
     console.error('FastAPI error:', err.response?.data ?? err.message);
     const status = err.response?.status || 500;
     const detail = err.response?.data?.detail ?? err.response?.data ?? err.message ?? 'Recommendation failed';
-    res.status(status).json({ error: detail });
+    return res.status(status).json({ error: detail });
+  }
+});
+
+app.post('/api/train-mf', async (req, res) => {
+  try {
+    const { data } = await axios.post('http://localhost:8000/train-mf');
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.response?.data?.detail ?? 'Training failed' });
+  }
+});
+
+app.get('/api/recommend-mf', async (req, res) => {
+  if (!req.session.userId) return res.status(401).json({ error: 'not authenticated' });
+  try {
+    const { data } = await axios.post('http://localhost:8000/recommend-mf', {
+      userId: req.session.userId,
+      n: 10,
+    });
+    res.json(data);
+  } catch (err) {
+    console.error('MF error:', err.response?.data ?? err.message);
+    res.status(500).json({ error: 'MF recommendation failed' });
+  }
+});
+
+app.get('/api/umap', async (req, res) => {
+  try {
+    const { data } = await axios.get('http://localhost:8000/umap')
+    res.json(data)
+  } catch (err) {
+    res.status(500).json({ error: 'UMAP unavailable' })
   }
 });
 
