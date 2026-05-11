@@ -1,4 +1,5 @@
 const dns = require('dns');
+const path = require('path');
 
 // set DNS servers to Google DNS to fix SRV lookup issues
 dns.setServers(['8.8.8.8', '8.8.4.4']);
@@ -109,7 +110,7 @@ app.get('/callback', async (req, res) => {
   );
 
   req.session.userId = profile.id;
-  res.redirect('http://127.0.0.1:5173/dashboard');
+  res.redirect('/dashboard');
 });
 
 // Step 3: Test — fetch current user's top tracks
@@ -213,6 +214,11 @@ app.post('/api/feedback', async (req, res) => {
   if (!trackId || !action) return res.status(400).json({ error: 'trackId and action required' });
   await Feedback.create({ userId: req.session.userId, trackId, action, context, source });
   res.json({ ok: true });
+});
+
+app.use(express.static(path.join(__dirname, '../client/dist')));
+app.get('/{*splat}', (req, res) => {
+  res.sendFile(path.join(__dirname, '../client/dist/index.html'));
 });
 
 app.listen(process.env.PORT, () => {

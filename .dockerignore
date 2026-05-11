@@ -1,0 +1,8 @@
+**/.git
+**/.gitignore
+**/node_modules
+ml-service/.venv
+**/__pycache__
+**/*.pyc
+ml-service/exploration.ipynb
+client/dist
