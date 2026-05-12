@@ -3,8 +3,8 @@
 A music recommendation app powered by Spotify and ML. Authenticates via Spotify OAuth, analyzes your top tracks, and serves personalized recommendations through a tiered ML pipeline (content-based KNN, collaborative filtering via Matrix Factorization, and UMAP visualization).
 
 ## Visuals
-<p align="center"><img src="assets/Login.png" alt="Login Page" width="50%"></p>
-<p align="center"><img src="assets/Dashboard.png" alt="Dashboard Page" width="50%"></p>
+<img src="assets/Login.png" alt="Login Page" width="50%">
+<img src="assets/Dashboard.png" alt="Dashboard Page" width="50%">
 
 ## Tech Stack
 
